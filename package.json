@@ -1,0 +1,87 @@
+{
+  "name": "bookmark-extension",
+  "displayName": "Bookmark Extension",
+  "description": "Bookmark lines with line number and content, with groups and colors",
+  "version": "0.0.1",
+  "publisher": "your-name",
+  "engines": { "vscode": "^1.50.0" },
+  "categories": ["Other"],
+
+  "main": "./extension.js",
+  "activationEvents": [
+    "onCommand:bm.toggleBookmark",
+    "onCommand:bm.clearBookmarks",
+    "onCommand:bm.openBookmark",
+    "onCommand:bm.removeBookmark",
+    "onView:bookmarksView"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "bm.toggleBookmark",
+        "title": "BM.Toggle Bookmark"
+      },
+      {
+        "command": "bm.clearBookmarks",
+        "title": "BM.Clear All Bookmarks"
+      },
+      {
+        "command": "bm.openBookmark",
+        "title": "BM.Open Bookmark"
+      },
+      {
+        "command": "bm.removeBookmark",
+        "title": "BM.Remove Bookmark"
+      }
+    ],
+    "views": {
+      "explorer": [
+        {
+          "id": "bookmarksView",
+          "name": "Bookmarks"
+        }
+      ]
+    },
+    "menus": {
+      "editor/title": [
+        {
+          "command": "bm.toggleBookmark",
+          "when": "editorTextFocus",
+          "group": "navigation"
+        },
+         {
+      "command": "bm.removeBookmark",
+      "when": "bm.isBookmarkedLine",
+      "group": "navigation"
+    }
+      ],
+      "view/item/context": [
+        {
+          "command": "bm.openBookmark",
+          "when": "view == bookmarksView && viewItem == bookmarkItem",
+          "group": "navigation"
+        },
+        {
+          "command": "bm.removeBookmark",
+          "when": "view == bookmarksView && viewItem == bookmarkItem",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "bm.clearBookmarks",
+          "when": "view == bookmarksView",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "prepare": "",
+    "postinstall": ""
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/vscode": "^1.50.0"
+  }
+}
