@@ -14,6 +14,14 @@ function activate(context) {
     const getActiveGroup = () => context.workspaceState.get('activeBookmarkGroup');
     const setActiveGroup = name => context.workspaceState.update('activeBookmarkGroup', name);
 
+    function makeIconUri(color){
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="16" height="16">
+      <path fill="${color}" d="M6 4C4.895 4 4 4.895 4 6V20L12 16L20 20V6C20 4.895 19.105 4 18 4H6Z"/>
+    </svg>`;
+  return vscode.Uri.parse(`data:image/svg+xml;utf8,${encodeURIComponent(svg)}`);
+}
+
     // --- Color helper ---
     function hslToHex(h, s, l) {
         s /= 100; l /= 100;
@@ -34,8 +42,16 @@ function activate(context) {
         saveGroups(groupColors);
     }
     const decorationTypes = new Map();
+    // build a gutter-icon + backgroundColor decoration for each group
     for (const [grp, col] of Object.entries(groupColors)) {
-        decorationTypes.set(grp, vscode.window.createTextEditorDecorationType({ backgroundColor: col }));
+        decorationTypes.set(
+          grp,
+          vscode.window.createTextEditorDecorationType({
+            backgroundColor: col,
+             gutterIconPath: makeIconUri(col),
+            gutterIconSize: 'contain'
+          })
+        );
     }
     let activeGroup = getActiveGroup();
     if (!activeGroup || !groupColors[activeGroup]) {
@@ -53,7 +69,16 @@ function activate(context) {
                 colors[grp] = c;
                 saveGroups(colors);
             }
-            decorationTypes.set(grp, vscode.window.createTextEditorDecorationType({ backgroundColor: c }));
+            decorationTypes.set(
+              grp,
+              vscode.window.createTextEditorDecorationType({
+                backgroundColor: c,
+                gutterIconPath: vscode.Uri.file(
+                  path.join(context.extensionPath, 'resources', 'bookmark.svg')
+                ),
+                gutterIconSize: 'contain'
+              })
+            );
         }
     }
 
