@@ -251,17 +251,32 @@ function activate(context) {
       return item;
     }
     getChildren(item) {
-      if (!item) {
-        const items = [
-          new ActiveGroupItem(activeGroup),
-          ...getBookmarks()
-            .filter((b) => b.group === activeGroup)
-            .map((b) => new BookmarkItem(b)),
-        ];
-        return Promise.resolve(items);
-      }
-      return Promise.resolve([]);
+  if (!item) {
+    // Group bookmarks by file under the active group
+    const grouped = {};
+    for (const b of getBookmarks().filter(b => b.group === activeGroup)) {
+      // use only the file name
+      const fileName = vscode.Uri.parse(b.uri).fsPath.split(path.sep).pop();
+      (grouped[fileName] ||= []).push(b);
     }
+    // Turn each file group into a collapsible TreeItem
+    return Promise.resolve(
+      Object.entries(grouped).map(([file, bms]) => {
+        const fileItem = new vscode.TreeItem(file, vscode.TreeItemCollapsibleState.Collapsed);
+        // stash the bookmarks on the item for getChildren below
+        fileItem.bookmarks = bms;
+        return fileItem;
+      })
+    );
+  }
+  // When dropping into a file node, show its bookmarks sorted by line
+  if (item.bookmarks instanceof Array) {
+    const sorted = item.bookmarks.sort((a, b) => a.line - b.line);
+    return Promise.resolve(sorted.map(b => new BookmarkItem(b)));
+  }
+  return Promise.resolve([]);
+}
+
     handleDrag(source, data) {
       if (source instanceof BookmarkItem) {
         data.set(
