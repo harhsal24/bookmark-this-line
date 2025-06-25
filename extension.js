@@ -6,315 +6,340 @@ const path = require('path');
  */
 
 function activate(context) {
-    // Helpers to get/save bookmarks and groups:
-    function getBookmarks() {
-        return context.workspaceState.get('bookmarks', []);
-    }
-    function saveBookmarks(bms) {
-        return context.workspaceState.update('bookmarks', bms);
-    }
-    function getGroups() {
-        return context.workspaceState.get('bookmarkGroups', {});
-    }
-    function saveGroups(obj) {
-        return context.workspaceState.update('bookmarkGroups', obj);
-    }
+    // --- State helpers ---
+    const getBookmarks = () => context.workspaceState.get('bookmarks', []);
+    const saveBookmarks = bms => context.workspaceState.update('bookmarks', bms);
+    const getGroups = () => context.workspaceState.get('bookmarkGroups', {});
+    const saveGroups = groups => context.workspaceState.update('bookmarkGroups', groups);
+    const getActiveGroup = () => context.workspaceState.get('activeBookmarkGroup');
+    const setActiveGroup = name => context.workspaceState.update('activeBookmarkGroup', name);
 
-    // Utility: convert HSL to hex for pastel colors
+    // --- Color helper ---
     function hslToHex(h, s, l) {
         s /= 100; l /= 100;
-        const k = n => (n + h / 30) % 12;
-        const a = s * Math.min(l, 1 - l);
+        const k = n => (n + h/30) % 12;
+        const a = s * Math.min(l, 1-l);
         const f = n => {
-            const x = l - a * Math.max(-1, Math.min(k(n) - 3, Math.min(9 - k(n), 1)));
+            const x = l - a * Math.max(-1, Math.min(k(n)-3, Math.min(9-k(n),1)));
             return Math.round(255 * x);
         };
         const toHex = v => v.toString(16).padStart(2, '0');
-        const r = f(0), g = f(8), b = f(4);
-        return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+        return `#${toHex(f(0))}${toHex(f(8))}${toHex(f(4))}`;
     }
 
-    // Decoration types per group
-    const decorationTypes = new Map();
-
-    // Initialize groups/colors
-    let groupColors = context.workspaceState.get('bookmarkGroups', {});
+    // --- Initialize groups and activeGroup ---
+    let groupColors = getGroups();
     if (Object.keys(groupColors).length === 0) {
-        const defaultColor = '#fff59d';
-        groupColors['Default'] = defaultColor;
-        context.workspaceState.update('bookmarkGroups', groupColors);
+        groupColors = { Default: '#fff59d' };
+        saveGroups(groupColors);
     }
-    for (const [grp, color] of Object.entries(groupColors)) {
-        const deco = vscode.window.createTextEditorDecorationType({ backgroundColor: color });
-        decorationTypes.set(grp, deco);
+    const decorationTypes = new Map();
+    for (const [grp, col] of Object.entries(groupColors)) {
+        decorationTypes.set(grp, vscode.window.createTextEditorDecorationType({ backgroundColor: col }));
+    }
+    let activeGroup = getActiveGroup();
+    if (!activeGroup || !groupColors[activeGroup]) {
+        activeGroup = Object.keys(groupColors)[0];
+        setActiveGroup(activeGroup);
     }
 
-    // Tree provider for sidebar
-    const bookmarkProvider = new BookmarkProvider(context);
-    context.subscriptions.push(
-        vscode.window.registerTreeDataProvider('bookmarksView', bookmarkProvider)
-    );
-
-    // Ensure decoration exists for a group
-    function ensureDecorationForGroup(group) {
-        if (!decorationTypes.has(group)) {
+    // --- Decorations ---
+    function ensureDecorationForGroup(grp) {
+        if (!decorationTypes.has(grp)) {
             const colors = getGroups();
-            const col = colors[group] || hslToHex(Math.random()*360, 70, 80);
-            if (!colors[group]) {
-                colors[group] = col;
+            let c = colors[grp];
+            if (!c) {
+                c = hslToHex(Math.random()*360, 70, 80);
+                colors[grp] = c;
                 saveGroups(colors);
             }
-            const deco = vscode.window.createTextEditorDecorationType({ backgroundColor: col });
-            decorationTypes.set(group, deco);
+            decorationTypes.set(grp, vscode.window.createTextEditorDecorationType({ backgroundColor: c }));
         }
     }
 
-    // Update decorations in one editor
-    function updateDecorationsForEditor(editor) {
+    function updateDecorations(editor) {
         if (!editor) return;
         const uri = editor.document.uri.toString();
         const rangesMap = new Map();
         for (const b of getBookmarks()) {
             if (b.uri === uri && b.line < editor.document.lineCount) {
-                ensureDecorationForGroup(b.group);
+                if (!decorationTypes.has(b.group)) ensureDecorationForGroup(b.group);
                 const deco = decorationTypes.get(b.group);
                 const lineText = editor.document.lineAt(b.line).text;
                 const range = new vscode.Range(b.line, 0, b.line, lineText.length);
-                if (!rangesMap.has(deco)) rangesMap.set(deco, [range]);
-                else rangesMap.get(deco).push(range);
+                (rangesMap.get(deco) || rangesMap.set(deco, []).get(deco)).push(range);
             }
         }
-        // Clear all then set
-        for (const deco of decorationTypes.values()) {
-            editor.setDecorations(deco, []);
-        }
-        for (const [deco, ranges] of rangesMap.entries()) {
-            editor.setDecorations(deco, ranges);
-        }
+        for (const deco of decorationTypes.values()) editor.setDecorations(deco, []);
+        for (const [deco, ranges] of rangesMap) editor.setDecorations(deco, ranges);
     }
+
     function updateAllDecorations() {
-        for (const editor of vscode.window.visibleTextEditors) {
-            updateDecorationsForEditor(editor);
+        vscode.window.visibleTextEditors.forEach(updateDecorations);
+    }
+
+    async function updateCursorContext() {
+        const e = vscode.window.activeTextEditor;
+        if (!e) return vscode.commands.executeCommand('setContext', 'bm.isBookmarkedLine', false);
+        const uri = e.document.uri.toString();
+        const line = e.selection.active.line;
+        const exists = getBookmarks().some(b => b.uri === uri && b.line === line && b.group === activeGroup);
+        vscode.commands.executeCommand('setContext', 'bm.isBookmarkedLine', exists);
+    }
+
+    // --- Tree Items ---
+    class GroupItem extends vscode.TreeItem {
+        constructor(name) {
+            const isActive = name === activeGroup;
+            super(isActive ? `${name} ⭐` : name, vscode.TreeItemCollapsibleState.Collapsed);
+            this.group = name;
+            this.contextValue = 'bookmarkGroupItem';
+            this.iconPath = new vscode.ThemeIcon(isActive ? 'star-full' : 'folder');
+            this.tooltip = isActive ? `${name} (Active Group)` : `${name} (Click to view bookmarks)`;
         }
     }
 
-    // Context key updater for "is cursor on bookmarked line?"
-    async function updateCursorBookmarkContext() {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            await vscode.commands.executeCommand('setContext', 'bm.isBookmarkedLine', false);
-            return;
+    class BookmarkItem extends vscode.TreeItem {
+        constructor(bookmark) {
+            const u = vscode.Uri.parse(bookmark.uri);
+            super(`${path.basename(u.fsPath)}:${bookmark.line+1} ${bookmark.content}`, vscode.TreeItemCollapsibleState.None);
+            this.bookmark = bookmark;
+            this.contextValue = 'bookmarkItem';
+            this.tooltip = `${u.fsPath} (Line ${bookmark.line+1})`;
+            this.command = { command: 'bm.openBookmark', title: 'Open Bookmark', arguments: [this] };
         }
-        const uri = editor.document.uri.toString();
-        const lineNum = editor.selection.active.line;
-        const exists = getBookmarks().some(b => b.uri === uri && b.line === lineNum);
-        await vscode.commands.executeCommand('setContext', 'bm.isBookmarkedLine', exists);
     }
 
-    // Subscribe context updates
+    class ActiveGroupItem extends vscode.TreeItem {
+        constructor(name) {
+            super(`Active: ${name}`, vscode.TreeItemCollapsibleState.None);
+            this.contextValue = 'activeGroupItem';
+            this.iconPath = new vscode.ThemeIcon('star-full');
+            this.tooltip = `Currently active bookmark group: ${name}`;
+        }
+    }
+
+    // --- TreeDataProviders ---
+    class GroupsProvider {
+        constructor() {
+            this._onDidChange = new vscode.EventEmitter();
+            this.onDidChangeTreeData = this._onDidChange.event;
+        }
+        refresh() { this._onDidChange.fire(); }
+        getTreeItem(item) { return item; }
+        getChildren(item) {
+            if (!item) {
+                return Promise.resolve(Object.keys(getGroups()).map(g => new GroupItem(g)));
+            }
+            return Promise.resolve(getBookmarks().filter(b => b.group === item.group).map(b => new BookmarkItem(b)));
+        }
+        handleDrag(source, data) {
+            if (source instanceof GroupItem) {
+                data.set('application/vnd.code.tree.bookmarkGroup', new vscode.DataTransferItem({ type: 'group', groupName: source.group }));
+            } else if (source instanceof BookmarkItem) {
+                data.set('application/vnd.code.tree.bookmarkItem', new vscode.DataTransferItem({ type: 'bookmark', bookmark: source.bookmark }));
+            }
+        }
+        async handleDrop(target, data) {
+            const transfer = data.get('application/vnd.code.tree.bookmarkItem');
+            if (transfer?.value?.type === 'bookmark' && target instanceof GroupItem) {
+                const { bookmark } = transfer.value;
+                if (bookmark.group !== target.group) {
+                    const all = getBookmarks();
+                    const idx = all.findIndex(b => b.uri===bookmark.uri && b.line===bookmark.line && b.group===bookmark.group);
+                    all[idx].group = target.group;
+                    await saveBookmarks(all);
+                    this.refresh(); bookmarksProv.refresh(); updateAllDecorations();
+                    vscode.window.showInformationMessage(`Bookmark moved to group: ${target.group}`);
+                }
+            }
+        }
+    }
+
+    class BookmarksProvider {
+        constructor() {
+            this._onDidChange = new vscode.EventEmitter();
+            this.onDidChangeTreeData = this._onDidChange.event;
+        }
+        refresh() { this._onDidChange.fire(); }
+        getTreeItem(item) { return item; }
+        getChildren(item) {
+            if (!item) {
+                const items = [new ActiveGroupItem(activeGroup), ...getBookmarks().filter(b => b.group===activeGroup).map(b => new BookmarkItem(b))];
+                return Promise.resolve(items);
+            }
+            return Promise.resolve([]);
+        }
+        handleDrag(source, data) {
+            if (source instanceof BookmarkItem) {
+                data.set('application/vnd.code.tree.bookmarkItem', new vscode.DataTransferItem({ type: 'bookmark', bookmark: source.bookmark }));
+            }
+        }
+        async handleDrop(target, data) {
+            const transfer = data.get('application/vnd.code.tree.bookmarkGroup');
+            if (transfer?.value?.type==='group') {
+                activeGroup = transfer.value.groupName;
+                await setActiveGroup(activeGroup);
+                groupsProv.refresh(); this.refresh(); updateAllDecorations(); updateCursorContext();
+                vscode.window.showInformationMessage(`📌 Active group changed to: ${activeGroup}`);
+            }
+        }
+    }
+
+    // --- Create TreeViews ---
+    const groupsProv = new GroupsProvider();
+    const bookmarksProv = new BookmarksProvider();
+
+    vscode.window.createTreeView('bookmarkGroupsView', {
+        treeDataProvider: groupsProv,
+        dragAndDropController: groupsProv,
+        dragMimeTypes: ['application/vnd.code.tree.bookmarkGroup','application/vnd.code.tree.bookmarkItem'],
+        dropMimeTypes: ['application/vnd.code.tree.bookmarkItem']
+    });
+
+    const viewBookmarks = vscode.window.createTreeView('bookmarksView', {
+        treeDataProvider: bookmarksProv,
+        dragAndDropController: bookmarksProv,
+        dragMimeTypes: ['application/vnd.code.tree.bookmarkItem'],
+        dropMimeTypes: ['application/vnd.code.tree.bookmarkGroup']
+    });
+    viewBookmarks.title = `Bookmarks: ${activeGroup}`;
+
+    // --- Commands ---
     context.subscriptions.push(
-        vscode.window.onDidChangeTextEditorSelection(updateCursorBookmarkContext),
-        vscode.window.onDidChangeActiveTextEditor(updateCursorBookmarkContext)
-    );
-    // Initial context
-    updateCursorBookmarkContext();
+        vscode.commands.registerCommand('bm.toggleBookmark', async () => {
+            const e = vscode.window.activeTextEditor;
+            if (!e) return vscode.window.showInformationMessage('Open a file first.');
+            const uri = e.document.uri.toString();
+            const line = e.selection.active.line;
+            const content = e.document.lineAt(line).text.trim();
 
-    // Toggle bookmark command
-    context.subscriptions.push(vscode.commands.registerCommand('bm.toggleBookmark', async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showInformationMessage('No active editor to toggle bookmark.');
-            return;
-        }
-        const doc = editor.document;
-        const uri = doc.uri.toString();
-        const lineNum = editor.selection.active.line;
-        const content = doc.lineAt(lineNum).text.trim();
-        let groups = getGroups();
-        const groupNames = Object.keys(groups);
-        let chosenGroup;
-        if (groupNames.length === 1) {
-            chosenGroup = groupNames[0];
-        } else {
-            const picks = [...groupNames, '$(plus) Create new group'];
-            const sel = await vscode.window.showQuickPick(picks, { placeHolder: 'Select bookmark group' });
-            if (!sel) return;
-            if (sel === '$(plus) Create new group') {
-                const name = await vscode.window.showInputBox({ prompt: 'Enter new group name' });
-                if (!name) {
-                    vscode.window.showWarningMessage('Group creation cancelled.');
-                    return;
-                }
-                if (groups[name]) {
-                    vscode.window.showWarningMessage(`Group "${name}" already exists.`);
-                    chosenGroup = name;
-                } else {
-                    const color = hslToHex(Math.random()*360, 70, 80);
-                    groups[name] = color;
-                    await saveGroups(groups);
-                    const deco = vscode.window.createTextEditorDecorationType({ backgroundColor: color });
-                    decorationTypes.set(name, deco);
-                    chosenGroup = name;
-                }
-            } else {
-                chosenGroup = sel;
+            let groups = getGroups();
+            if (!groups[activeGroup]) {
+                const names = Object.keys(groups);
+                if (!names.length) { groups['Default']='#fff59d'; saveGroups(groups); }
+                activeGroup = names[0]||'Default'; await setActiveGroup(activeGroup);
             }
-        }
-        const bms = getBookmarks();
-        const idx = bms.findIndex(b => b.uri === uri && b.line === lineNum && b.group === chosenGroup);
-        if (idx >= 0) {
-            bms.splice(idx, 1);
-            vscode.window.showInformationMessage(`Removed bookmark on toggle: ${path.basename(doc.uri.fsPath)}:${lineNum+1}`);
-        } else {
-            bms.push({ uri, line: lineNum, content, group: chosenGroup });
-            vscode.window.showInformationMessage(`Added bookmark: ${path.basename(doc.uri.fsPath)}:${lineNum+1} [${chosenGroup}]`);
-        }
-        await saveBookmarks(bms);
-        bookmarkProvider.refresh();
-        updateAllDecorations();
-        updateCursorBookmarkContext();
-    }));
 
-    // Remove bookmark command
-    context.subscriptions.push(vscode.commands.registerCommand('bm.removeBookmark', async (item) => {
-        // If invoked from sidebar (item.bookmark present)
-        if (item && item.bookmark) {
-            const { uri, line, group } = item.bookmark;
             const bms = getBookmarks();
-            const idx = bms.findIndex(b => b.uri === uri && b.line === line && b.group === group);
-            if (idx >= 0) {
-                bms.splice(idx, 1);
-                await saveBookmarks(bms);
-                bookmarkProvider.refresh();
-                updateAllDecorations();
-                vscode.window.showInformationMessage(`Removed bookmark: ${path.basename(vscode.Uri.parse(uri).fsPath)}:${line+1}`);
-                updateCursorBookmarkContext();
-            } else {
-                vscode.window.showWarningMessage('Bookmark not found in state.');
-            }
-        } else {
-            // Remove bookmark at current cursor line
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) {
-                vscode.window.showInformationMessage('No active editor.');
-                return;
-            }
-            const doc = editor.document;
-            const uri = doc.uri.toString();
-            const lineNum = editor.selection.active.line;
-            const bms = getBookmarks();
-            const matches = bms.filter(b => b.uri === uri && b.line === lineNum);
-            if (matches.length === 0) {
-                vscode.window.showInformationMessage('No bookmark on current line to remove.');
-                return;
-            }
-            if (matches.length === 1) {
-                const { group } = matches[0];
-                const idx = bms.findIndex(b => b.uri === uri && b.line === lineNum && b.group === group);
-                bms.splice(idx, 1);
-                await saveBookmarks(bms);
-                bookmarkProvider.refresh();
-                updateAllDecorations();
-                vscode.window.showInformationMessage(`Removed bookmark: ${path.basename(doc.uri.fsPath)}:${lineNum+1} [${group}]`);
-                updateCursorBookmarkContext();
-            } else {
-                const picks = matches.map(b => ({
-                    label: `[${b.group}] ${path.basename(doc.uri.fsPath)}:${lineNum+1}`,
-                    description: b.content,
-                    bookmark: b
-                }));
-                const sel = await vscode.window.showQuickPick(picks, { placeHolder: 'Multiple bookmarks here; pick which to remove' });
-                if (!sel) return;
-                const b = sel.bookmark;
-                const idx = bms.findIndex(x => x.uri === b.uri && x.line === b.line && x.group === b.group);
-                if (idx >= 0) {
-                    bms.splice(idx, 1);
-                    await saveBookmarks(bms);
-                    bookmarkProvider.refresh();
-                    updateAllDecorations();
-                    vscode.window.showInformationMessage(`Removed bookmark: ${path.basename(doc.uri.fsPath)}:${lineNum+1} [${b.group}]`);
-                    updateCursorBookmarkContext();
-                }
-            }
-        }
-    }));
-
-    // Clear all bookmarks
-    context.subscriptions.push(vscode.commands.registerCommand('bm.clearBookmarks', async () => {
-        await saveBookmarks([]);
-        bookmarkProvider.refresh();
-        updateAllDecorations();
-        vscode.window.showInformationMessage('Cleared all bookmarks.');
-        updateCursorBookmarkContext();
-    }));
-
-    // Open bookmark
-    context.subscriptions.push(vscode.commands.registerCommand('bm.openBookmark', item => {
-        if (!item || !item.bookmark) return;
-        const uriStr = item.bookmark.uri;
-        const uri = vscode.Uri.parse(uriStr);
-        vscode.workspace.openTextDocument(uri).then(doc => {
-            vscode.window.showTextDocument(doc).then(editor => {
-                const pos = new vscode.Position(item.bookmark.line, 0);
-                editor.selection = new vscode.Selection(pos, pos);
-                editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
+            const idx = bms.findIndex(b => b.uri===uri&&b.line===line&&b.group===activeGroup);
+            if (idx>=0) { bms.splice(idx,1); vscode.window.showInformationMessage('Bookmark removed'); }
+            else { bms.push({uri,line,content,group:activeGroup}); vscode.window.showInformationMessage(`Bookmark added to ${activeGroup}`); }
+            await saveBookmarks(bms); groupsProv.refresh(); bookmarksProv.refresh(); updateAllDecorations(); updateCursorContext();
+        }),
+        vscode.commands.registerCommand('bm.clearBookmarks', async () => {
+            const active = getBookmarks().filter(b=>b.group===activeGroup);
+            if (!active.length) return vscode.window.showInformationMessage('No bookmarks to clear');
+            const confirm = await vscode.window.showWarningMessage(`Clear ${active.length} bookmarks from "${activeGroup}"?`,{modal:true},'Yes');
+            if (confirm!=='Yes') return;
+            const filtered = getBookmarks().filter(b=>b.group!==activeGroup);
+            await saveBookmarks(filtered); groupsProv.refresh(); bookmarksProv.refresh(); updateAllDecorations(); updateCursorContext();
+            vscode.window.showInformationMessage(`Cleared bookmarks from ${activeGroup}`);
+        }),
+        vscode.commands.registerCommand('bm.openBookmark', item => {
+            const bm = item?.bookmark; if (!bm) return;
+            vscode.workspace.openTextDocument(vscode.Uri.parse(bm.uri)).then(doc=>{
+                vscode.window.showTextDocument(doc).then(ed=>{
+                    const pos = new vscode.Position(bm.line,0);
+                    ed.selection=new vscode.Selection(pos,pos);
+                    ed.revealRange(new vscode.Range(pos,pos),vscode.TextEditorRevealType.InCenter);
+                });
             });
-        });
-    }));
+        }),
+        vscode.commands.registerCommand('bm.removeBookmark', async item => {
+            const bm = item?.bookmark;
+            if (bm) {
+                const all = getBookmarks();
+                const idx = all.findIndex(b=>b.uri===bm.uri&&b.line===bm.line&&b.group===bm.group);
+                if (idx>=0) { all.splice(idx,1); await saveBookmarks(all); groupsProv.refresh(); bookmarksProv.refresh(); updateAllDecorations(); updateCursorContext(); vscode.window.showInformationMessage('Bookmark removed'); }
+            }
+        }),
+        vscode.commands.registerCommand('bm.moveBookmarkToGroup', async item => {
+            const bm = item?.bookmark; if (!bm) return;
+            const groups = Object.keys(getGroups()).filter(g=>g!==bm.group);
+            if (!groups.length) return vscode.window.showInformationMessage('No other groups');
+            const target = await vscode.window.showQuickPick(groups,{placeHolder:'Move to which group?'});
+            if (!target) return;
+            const all = getBookmarks(); const idx = all.findIndex(b=>b.uri===bm.uri&&b.line===bm.line&&b.group===bm.group);
+            if (idx>=0) { all[idx].group=target; await saveBookmarks(all); groupsProv.refresh(); bookmarksProv.refresh(); updateAllDecorations(); vscode.window.showInformationMessage(`Moved to ${target}`); }
+        }),
+        vscode.commands.registerCommand('bm.setActiveGroup', async item => {
+            if (!item?.group) return;
+            activeGroup = item.group; await setActiveGroup(activeGroup);
+            groupsProv.refresh(); bookmarksProv.refresh(); viewBookmarks.title=`Bookmarks: ${activeGroup}`;
+            updateAllDecorations(); updateCursorContext();
+        }),
+        vscode.commands.registerCommand('bm.createGroup', async () => {
+            const name = await vscode.window.showInputBox({prompt:'New group name'});
+            if (!name) return;
+            const groups = getGroups(); if (groups[name]) return vscode.window.showWarningMessage('Exists');
+            groups[name]=hslToHex(Math.random()*360,70,80); await saveGroups(groups);
+            activeGroup=name; await setActiveGroup(name);
+            groupsProv.refresh(); bookmarksProv.refresh(); viewBookmarks.title=`Bookmarks: ${activeGroup}`;
+            updateAllDecorations(); updateCursorContext();
+        }),
+        vscode.commands.registerCommand('bm.renameGroup', async item => {
+            const old = item?.group; if (!old) return;
+            const newName = await vscode.window.showInputBox({prompt:`Rename "${old}" to:`,value:old});
+            if (!newName || newName===old) return;
+            const groups = getGroups(); if (groups[newName]) return vscode.window.showWarningMessage('Exists');
+            const color = groups[old]; delete groups[old]; groups[newName]=color; await saveGroups(groups);
+            const bms = getBookmarks().map(b=>b.group===old?{...b,group:newName}:b);
+            await saveBookmarks(bms);
+            decorationTypes.delete(old);
+            decorationTypes.set(newName, vscode.window.createTextEditorDecorationType({backgroundColor:color}));
+            if (activeGroup===old) { activeGroup=newName; await setActiveGroup(newName); viewBookmarks.title=`Bookmarks: ${activeGroup}`; }
+            groupsProv.refresh(); bookmarksProv.refresh(); updateAllDecorations(); updateCursorContext();
+        }),
+        vscode.commands.registerCommand('bm.deleteGroup', async item => {
+            const name = item?.group; if (!name) return;
+            const count = getBookmarks().filter(b=>b.group===name).length;
+            const confirm = await vscode.window.showWarningMessage(`Delete "${name}" and ${count} bookmarks?`,{modal:true},'Yes');
+            if (confirm!=='Yes') return;
+            const groups = getGroups(); delete groups[name]; await saveGroups(groups);
+            const remaining = getBookmarks().filter(b=>b.group!==name);
+            await saveBookmarks(remaining);
+            decorationTypes.delete(name);
+            if (activeGroup===name) {
+                const keys = Object.keys(groups);
+                if (!keys.length) { groups['Default']='#fff59d'; await saveGroups(groups); activeGroup='Default'; }
+                else activeGroup=keys[0];
+                await setActiveGroup(activeGroup);
+            }
+            groupsProv.refresh(); bookmarksProv.refresh(); viewBookmarks.title=`Bookmarks: ${activeGroup}`;
+            updateAllDecorations(); updateCursorContext();
+        }),
 
-    // Hook decoration updates
-    context.subscriptions.push(
-        vscode.window.onDidChangeActiveTextEditor(updateDecorationsForEditor),
-        vscode.window.onDidChangeTextDocument(() => updateAllDecorations())
+        // --- Keep bookmarks in sync with edits ---
+        vscode.workspace.onDidChangeTextDocument(async (event) => {
+            const changes = event.contentChanges;
+            if (!changes.length) return;
+            let bms = getBookmarks();
+            for (const change of changes) {
+                const oldCount = change.range.end.line - change.range.start.line + 1;
+                const newCount = change.text.split('\n').length;
+                const delta = newCount - oldCount;
+                if (delta === 0) continue;
+                for (let bm of bms) {
+                    if (change.range.start.line < bm.line) {
+                        bm.line = Math.max(0, bm.line + delta);
+                    }
+                }
+            }
+            await saveBookmarks(bms);
+            updateAllDecorations();
+        }),
+        // legacy decoration repaint
+        vscode.workspace.onDidChangeTextDocument(updateAllDecorations),
+        vscode.window.onDidChangeActiveTextEditor(editor => { updateDecorations(editor); updateCursorContext(); }),
+        vscode.window.onDidChangeTextEditorSelection(updateCursorContext)
     );
 
-    // Initial decorations
+    // --- Initial render ---
     updateAllDecorations();
+    updateCursorContext();
 }
 
-function deactivate() {
-    // nothing to clean up
-}
-
-class BookmarkItem extends vscode.TreeItem {
-    constructor(bookmark) {
-        const uriObj = vscode.Uri.parse(bookmark.uri);
-        const fileName = path.basename(uriObj.fsPath);
-        let label;
-        if (bookmark.group === 'Default') {
-            label = `${fileName}:${bookmark.line + 1} ${bookmark.content}`;
-        } else {
-            label = `${bookmark.group} — ${fileName}:${bookmark.line + 1} ${bookmark.content}`;
-        }
-        super(label, vscode.TreeItemCollapsibleState.None);
-        this.command = {
-            command: 'bm.openBookmark',
-            title: 'Open Bookmark',
-            arguments: [this]
-        };
-        this.tooltip = `${uriObj.fsPath} (Line ${bookmark.line + 1}) [Group: ${bookmark.group}]`;
-        this.bookmark = bookmark;
-        this.contextValue = 'bookmarkItem';
-    }
-}
-
-class BookmarkProvider {
-    constructor(context) {
-        this.context = context;
-        this._onDidChangeTreeData = new vscode.EventEmitter();
-        this.onDidChangeTreeData = this._onDidChangeTreeData.event;
-    }
-    refresh() {
-        this._onDidChangeTreeData.fire();
-    }
-    getTreeItem(element) {
-        return element;
-    }
-    getChildren() {
-        const bms = this.context.workspaceState.get('bookmarks', []);
-        const items = bms.map(b => new BookmarkItem(b));
-        return Promise.resolve(items);
-    }
-}
+function deactivate() {}
 
 module.exports = { activate, deactivate };

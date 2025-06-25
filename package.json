@@ -4,41 +4,79 @@
   "description": "Bookmark lines with line number and content, with groups and colors",
   "version": "0.0.1",
   "publisher": "your-name",
-  "engines": { "vscode": "^1.50.0" },
+  "engines": {
+    "vscode": "^1.50.0"
+  },
   "categories": ["Other"],
-
   "main": "./extension.js",
   "activationEvents": [
     "onCommand:bm.toggleBookmark",
     "onCommand:bm.clearBookmarks",
     "onCommand:bm.openBookmark",
     "onCommand:bm.removeBookmark",
-    "onView:bookmarksView"
+    "onCommand:bm.moveBookmarkToGroup",
+   
+    "onView:bookmarksView",
+    "onView:bookmarkGroupsView"
   ],
   "contributes": {
     "commands": [
       {
         "command": "bm.toggleBookmark",
-        "title": "BM.Toggle Bookmark"
+        "title": "BM: Toggle Bookmark",
+        "icon": "$(bookmark)"
       },
       {
         "command": "bm.clearBookmarks",
-        "title": "BM.Clear All Bookmarks"
+        "title": "BM: Clear All Bookmarks",
+        "icon": "$(clear-all)"
       },
       {
         "command": "bm.openBookmark",
-        "title": "BM.Open Bookmark"
+        "title": "BM: Open Bookmark",
+        "icon": "$(go-to-file)"
       },
       {
         "command": "bm.removeBookmark",
-        "title": "BM.Remove Bookmark"
+        "title": "BM: Remove Bookmark",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "bm.setActiveGroup",
+        "title": "BM: Set Active Group",
+        "icon": "$(check)"
+      },
+      {
+        "command": "bm.createGroup",
+        "title": "BM: Create Group",
+        "icon": "$(add)"
+      },
+      {
+        "command": "bm.renameGroup",
+        "title": "BM: Rename Group",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "bm.deleteGroup",
+        "title": "BM: Delete Group",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "bm.moveBookmarkToGroup",
+        "title": "BM: Move Bookmark To Group",
+        "icon": "$(list-selection)"
       }
+     
     ],
     "views": {
       "explorer": [
         {
           "id": "bookmarksView",
           "name": "Bookmarks"
+        },
+        {
+          "id": "bookmarkGroupsView",
+          "name": "Bookmark Groups"
         }
       ]
     },
@@ -48,23 +86,45 @@
           "command": "bm.toggleBookmark",
           "when": "editorTextFocus",
           "group": "navigation"
-        },
-         {
-      "command": "bm.removeBookmark",
-      "when": "bm.isBookmarkedLine",
-      "group": "navigation"
-    }
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "bm.toggleBookmark",
+          "when": "editorTextFocus",
+          "group": "bookmarks"
+        }
       ],
       "view/item/context": [
         {
           "command": "bm.openBookmark",
           "when": "view == bookmarksView && viewItem == bookmarkItem",
-          "group": "navigation"
+          "group": "inline"
         },
         {
           "command": "bm.removeBookmark",
           "when": "view == bookmarksView && viewItem == bookmarkItem",
-          "group": "navigation"
+          "group": "inline"
+        },
+        {
+          "command": "bm.moveBookmarkToGroup",
+          "when": "view == bookmarksView && viewItem == bookmarkItem",
+          "group": "bookmark@1"
+        },
+        {
+          "command": "bm.setActiveGroup",
+          "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem",
+          "group": "inline"
+        },
+        {
+          "command": "bm.renameGroup",
+          "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem",
+          "group": "context"
+        },
+        {
+          "command": "bm.deleteGroup",
+          "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem",
+          "group": "context"
         }
       ],
       "view/title": [
@@ -72,13 +132,27 @@
           "command": "bm.clearBookmarks",
           "when": "view == bookmarksView",
           "group": "navigation"
+        },
+        {
+          "command": "bm.createGroup",
+          "when": "view == bookmarkGroupsView",
+          "group": "navigation"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "bm.toggleBookmark",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorTextFocus"
+      }
+    ]
   },
   "scripts": {
-    "prepare": "",
-    "postinstall": ""
+    "vscode:prepublish": "npm run compile",
+    "compile": "echo 'No compilation needed'",
+    "watch": "echo 'No watch needed'"
   },
   "dependencies": {},
   "devDependencies": {
