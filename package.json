@@ -150,6 +150,38 @@
                 }
             ]
         },
+        "configuration": {
+            "type": "object",
+            "title": "Bookmark Extension Settings",
+            "properties": {
+                "bookmarkExtension.groupColors": {
+                    "type": "object",
+                    "description": "Optional per-group color overrides (hex strings). Example: { \"Default\": \"#ff00ff\", \"Tests\": \"#00ff00\" }",
+                    "default": {}
+                },
+                "bookmarkExtension.defaultColors": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "pattern": "^#([0-9A-Fa-f]{6})$"
+                    },
+                    "description": "Fallback HSL-converted colors when you create new groups (as hex).",
+                    "default": [
+                        "#fff59d",
+                        "#aed581",
+                        "#ba68c8",
+                        "#4fc3f7"
+                    ]
+                },
+                "bookmarkExtension.opacity": {
+                    "type": "number",
+                    "default": 0.3,
+                    "minimum": 0,
+                    "maximum": 1,
+                    "description": "Opacity for the background highlight (0 = transparent, 1 = opaque)."
+                }
+            }
+        },
         "keybindings": [
             {
                 "command": "bm.toggleBookmark",
