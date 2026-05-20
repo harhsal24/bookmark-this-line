@@ -9,7 +9,7 @@
         },
         "categories": [
                 "Other"
-        ],
+        ],      
         "main": "./extension.js",
         "activationEvents": [
                 "onCommand:bm.toggleBookmark",

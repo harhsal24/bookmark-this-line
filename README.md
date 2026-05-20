@@ -9,16 +9,19 @@ A powerful and intuitive bookmark extension that helps you navigate your code wi
 - **Line Preservation**: Bookmarks automatically adjust when you add/remove lines
 - **Content Preview**: See the actual code content in the bookmark list
 - **Fast Navigation**: Jump to next/previous bookmarks with `F8`/`Shift+F8`
+- **Cross-File Jumping**: Seamlessly jump to bookmarks in different files
 
 ### 🏷️ Group Management
 - **Multiple Groups**: Organize bookmarks into custom groups (Default, Tests, TODO, etc.)
 - **Color-Coded**: Each group gets a unique color for easy visual identification
 - **Active Group**: Work with one group at a time to stay focused
-- **Drag & Drop**: Move bookmarks between groups effortlessly
+- **Drag & Drop**: Reorder groups effortlessly in the sidebar
+- **Quick Reorder**: Use the inline Move Up (↑) and Move Down (↓) arrows to organize bookmarks within a group
 
 ### 🎨 Visual Experience
 - **Gutter Icons**: Colored bookmark icons in the editor gutter
 - **Line Highlighting**: Subtle background highlighting of bookmarked lines
+- **Flash Highlights**: Animate jumps with a visual color flash to catch your attention
 - **Customizable**: Adjust colors and opacity to match your theme
 - **Tree Views**: Organized sidebar panels for groups and bookmarks
 
@@ -44,6 +47,7 @@ A powerful and intuitive bookmark extension that helps you navigate your code wi
 | `BM: Previous Bookmark` | `Shift+F8` | Jump to previous bookmark in active group |
 | `BM: Clear All Bookmarks` | - | Remove all bookmarks from active group |
 | `BM: Create Group` | - | Create a new bookmark group |
+| `BM: Toggle Cross-File Jump` | - | Allow or block `F8` jumps to different files |
 
 ## 🎛️ Configuration
 
@@ -63,7 +67,10 @@ Customize the extension through VS Code settings:
     "#ba68c8",
     "#4fc3f7"
   ],
-  "bookmarkExtension.opacity": 0.3
+  "bookmarkExtension.opacity": 0.3,
+  "bookmarkExtension.flashHighlight": true,
+  "bookmarkExtension.scrollAnimation": "all",
+  "bookmarkExtension.allowCrossFileJump": true
 }
 ```
 
@@ -72,6 +79,9 @@ Customize the extension through VS Code settings:
 - **`groupColors`**: Override colors for specific groups (hex format)
 - **`defaultColors`**: Fallback colors for new groups
 - **`opacity`**: Background highlight opacity (0-1, where 0 is transparent)
+- **`flashHighlight`**: Briefly flash the bookmark color when jumping to it
+- **`scrollAnimation`**: Control smooth scrolling (`all`, `sameFileOnly`, `none`)
+- **`allowCrossFileJump`**: Let `F8` jump across files instead of wrapping inside the current file
 
 ## 🖱️ Using the Interface
 
@@ -79,15 +89,15 @@ Customize the extension through VS Code settings:
 
 **Bookmark Groups Panel:**
 - View all your bookmark groups
-- Active group is marked with a ⭐ star
+- Active group is marked with a bullet point
 - Click any group to switch to it
+- Hover over a bookmark to use Move Up (↑) / Move Down (↓) buttons
 - Right-click for group management options
 
 **Bookmarks Panel:**
 - Shows bookmarks from the active group
 - Organized by file for easy navigation
 - Click any bookmark to jump to that location
-- Drag bookmarks between groups
 
 ### Context Menus
 
@@ -107,7 +117,6 @@ Customize the extension through VS Code settings:
 1. **Create Semantic Groups**: Use groups like "TODO", "Bugs", "Important", "Review"
 2. **Color Coordination**: Match group colors to your workflow (red for bugs, yellow for TODO)
 3. **Regular Cleanup**: Use "Clear All Bookmarks" to clean up completed tasks
-4. **File Organization**: Bookmarks are grouped by filename for easy navigation
 
 ### Best Practices
 
@@ -119,7 +128,7 @@ Customize the extension through VS Code settings:
 ## 🔧 Advanced Features
 
 ### Drag and Drop
-- Drag bookmarks between groups in the sidebar
+- Drag groups to reorder them in the sidebar
 - Visual feedback during drag operations
 - Automatic refresh of all views
 
@@ -133,61 +142,19 @@ Customize the extension through VS Code settings:
 - Cross-project bookmark management
 - Persistent storage across VS Code sessions
 
-## 🎯 Use Cases
-
-### Development Workflows
-- **Code Review**: Mark lines that need review or discussion
-- **Debugging**: Track important breakpoint locations and debug points
-- **TODO Management**: Keep track of tasks and improvements needed
-- **Learning**: Bookmark important code patterns while studying codebases
-
-### Team Collaboration
-- **Code Tours**: Create bookmark groups for different areas of the codebase
-- **Documentation**: Mark important sections for team reference
-- **Refactoring**: Track areas that need refactoring attention
-
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
 **Bookmarks not showing?**
 - Make sure you have an active group selected
-- Check that bookmarks are in the correct group
 - Try refreshing the sidebar views
 
 **Performance issues?**
 - The extension uses throttling to maintain performance
-- Large numbers of bookmarks are handled efficiently
 - If issues persist, try restarting VS Code
 
 **Colors not updating?**
 - Settings changes apply automatically
-- Use the "Refresh Decorations" command if needed
 - Ensure color values are valid hex codes
 
-### Getting Help
-
-If you encounter issues:
-1. Check the VS Code Developer Console for errors
-2. Try disabling/re-enabling the extension
-3. Report issues with steps to reproduce
-
-## 🤝 Contributing
-
-We welcome contributions! Whether it's:
-- 🐛 Bug reports
-- 💡 Feature suggestions  
-- 📝 Documentation improvements
-- 🔧 Code contributions
-
-## 📄 License
-
-This extension is released under the MIT License.
-
-## 🙏 Acknowledgments
-
-Built with ❤️ for the VS Code community. Thanks to all users who provide feedback and help improve the extension!
-
----
-
-**Enjoy your enhanced coding experience with Smart Bookmarks!** 🚀

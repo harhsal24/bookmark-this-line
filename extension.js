@@ -5,6 +5,14 @@ const path = require("path");
  * @typedef {{ uri: string, line: number, content: string, group: string }} Bookmark
  */
 
+const DEBUG = false;
+
+function debugLog(...args) {
+  if (DEBUG) {
+    console.log(...args);
+  }
+}
+
 async function activate(context) {
   // --- Performance optimizations ---
   let decorationUpdateTimeout;
@@ -492,7 +500,9 @@ async function activate(context) {
         vscode.TreeItemCollapsibleState.None
       );
       this.bookmark = bookmark;
-      this.id = `bm-${viewId}-${bookmark.group}-${bookmark.uri}-${bookmark.line}`;
+      // Sanitize ID to prevent VS Code drag-and-drop issues with special characters in URIs
+      const safeUri = bookmark.uri.replace(/[^a-zA-Z0-9]/g, '-');
+      this.id = `bm-${viewId}-${bookmark.group}-${safeUri}-${bookmark.line}`;
       this.contextValue = "bookmarkItem";
       this.tooltip = `${u.fsPath} (Line ${bookmark.line + 1})`;
       this.iconPath = makeIconUri(color);
@@ -522,12 +532,17 @@ async function activate(context) {
     }
     
     getParent(element) {
-      if (element instanceof BookmarkItem) {
-        const groups = getGroups();
-        const groupColor = groups[element.bookmark.group];
-        return new GroupItem(element.bookmark.group, element.bookmark.group === activeGroup, groupColor);
+      try {
+        if (element instanceof BookmarkItem) {
+          const groups = getGroups();
+          const groupColor = groups[element.bookmark.group];
+          return new GroupItem(element.bookmark.group, element.bookmark.group === activeGroup, groupColor);
+        }
+        return null;
+      } catch (err) {
+        console.error(`[GroupsProvider getParent] Error:`, err);
+        return null;
       }
-      return null;
     }
     
     getChildren(item) {
@@ -546,141 +561,151 @@ async function activate(context) {
     }
     
     handleDrag(source, data) {
-      console.log(`[GroupsProvider Drag] Starting drag. Source elements count: ${source.length}`);
-      source.forEach((el, i) => {
-        if (el instanceof GroupItem) {
-          console.log(`  Element ${i}: GroupItem "${el.group}"`);
-        } else if (el instanceof BookmarkItem) {
-          console.log(`  Element ${i}: BookmarkItem "${el.bookmark.content}" at line ${el.bookmark.line} in group "${el.bookmark.group}"`);
-        }
-      });
-      data.set("application/vnd.code.tree.bookmarkgroupsview", 
-        new vscode.DataTransferItem(source));
+      try {
+        debugLog(`[GroupsProvider Drag] Starting drag. Source elements count: ${source.length}`);
+        source.forEach((el, i) => {
+          if (el instanceof GroupItem) {
+            debugLog(`  Element ${i}: GroupItem "${el.group}"`);
+          } else if (el instanceof BookmarkItem) {
+            debugLog(`  Element ${i}: BookmarkItem "${el.bookmark.content}" at line ${el.bookmark.line} in group "${el.bookmark.group}"`);
+          }
+        });
+        data.set("application/vnd.code.tree.bookmarkgroupsview", 
+          new vscode.DataTransferItem(source));
+      } catch (err) {
+        console.error(`[GroupsProvider Drag] Error during drag:`, err);
+        vscode.window.showErrorMessage(`Drag error: ${err.message}`);
+      }
     }
     
     async handleDrop(target, data) {
-      console.log(`[GroupsProvider Drop] Received drop. Target type: ${target ? target.constructor.name : "root"}`);
-      if (target instanceof GroupItem) {
-        console.log(`  Target: GroupItem "${target.group}"`);
-      } else if (target instanceof BookmarkItem) {
-        console.log(`  Target: BookmarkItem "${target.bookmark.content}" at line ${target.bookmark.line} in group "${target.bookmark.group}"`);
-      }
-      
-      const transfer = data.get("application/vnd.code.tree.bookmarkgroupsview") || 
-                       data.get("application/vnd.code.tree.bookmarksview");
-      if (!transfer) {
-        console.log(`[GroupsProvider Drop] No valid transfer data found matching expected MIME types.`);
-        return;
-      }
-      
-      const elements = transfer.value;
-      if (!Array.isArray(elements) || !elements.length) {
-        console.log(`[GroupsProvider Drop] Transfer data has empty or invalid value.`);
-        return;
-      }
-      const element = elements[0];
-      
-      // Case 1: Dragging a GroupItem (Reordering groups)
-      if (element instanceof GroupItem) {
-        console.log(`[GroupsProvider Drop] Dragged item is GroupItem "${element.group}". Reordering...`);
-        const draggedGroupName = element.group;
-        const order = getGroupOrder();
-        
-        const draggedIdx = order.indexOf(draggedGroupName);
-        if (draggedIdx >= 0) {
-          order.splice(draggedIdx, 1);
-        }
-        
+      try {
+        debugLog(`[GroupsProvider Drop] Received drop. Target type: ${target ? target.constructor.name : "root"}`);
         if (target instanceof GroupItem) {
-          const targetIdx = order.indexOf(target.group);
-          if (targetIdx >= 0) {
-            order.splice(targetIdx, 0, draggedGroupName);
-          } else {
-            order.push(draggedGroupName);
-          }
-        } else {
-          order.push(draggedGroupName);
+          debugLog(`  Target: GroupItem "${target.group}"`);
+        } else if (target instanceof BookmarkItem) {
+          debugLog(`  Target: BookmarkItem "${target.bookmark.content}" at line ${target.bookmark.line} in group "${target.bookmark.group}"`);
         }
         
-        await saveGroupOrder(order);
-        this.refresh();
-        return;
-      }
-      
-      // Case 2: Dragging a BookmarkItem (Reordering bookmarks or moving to another group)
-      if (element instanceof BookmarkItem) {
-        console.log(`[GroupsProvider Drop] Dragged item is BookmarkItem "${element.bookmark.content}". Reordering or moving...`);
-        const bookmark = element.bookmark;
-        const all = getBookmarks();
-        
-        const draggedIdx = all.findIndex(b =>
-          b.uri === bookmark.uri && b.line === bookmark.line && b.group === bookmark.group
-        );
-        if (draggedIdx < 0) {
-          console.log(`[GroupsProvider Drop] Could not find the dragged bookmark in local store.`);
+        const transfer = data.get("application/vnd.code.tree.bookmarkgroupsview") || 
+                         data.get("application/vnd.code.tree.bookmarksview");
+        if (!transfer) {
+          debugLog(`[GroupsProvider Drop] No valid transfer data found matching expected MIME types.`);
           return;
         }
         
-        const draggedBm = all[draggedIdx];
+        const elements = transfer.value;
+        if (!Array.isArray(elements) || !elements.length) {
+          debugLog(`[GroupsProvider Drop] Transfer data has empty or invalid value.`);
+          return;
+        }
+        const element = elements[0];
         
-        if (target instanceof GroupItem) {
-          console.log(`[GroupsProvider Drop] Dropped on GroupItem "${target.group}". Moving bookmark...`);
-          all.splice(draggedIdx, 1);
-          if (draggedBm.group !== target.group) {
-            draggedBm.group = target.group;
-            all.push(draggedBm);
-            await saveBookmarks(all);
-            this.refresh();
-            bookmarksProv.refresh();
-            throttledUpdateAllDecorations();
-            vscode.window.showInformationMessage(`Bookmark moved to group: ${target.group}`);
-          } else {
-            all.push(draggedBm);
-            await saveBookmarks(all);
-            this.refresh();
-            bookmarksProv.refresh();
-            throttledUpdateAllDecorations();
-            vscode.window.showInformationMessage(`Bookmark moved to end of group`);
-          }
-        } else if (target instanceof BookmarkItem) {
-          console.log(`[GroupsProvider Drop] Dropped on BookmarkItem "${target.bookmark.content}". Reordering within group...`);
-          const targetIdx = all.findIndex(b =>
-            b.uri === target.bookmark.uri && b.line === target.bookmark.line && b.group === target.bookmark.group
-          );
+        // Case 1: Dragging a GroupItem (Reordering groups)
+        if (element instanceof GroupItem) {
+          debugLog(`[GroupsProvider Drop] Dragged item is GroupItem "${element.group}". Reordering...`);
+          const draggedGroupName = element.group;
+          const order = getGroupOrder();
           
-          if (targetIdx >= 0) {
-            all.splice(draggedIdx, 1);
-            
-            if (draggedBm.group !== target.bookmark.group) {
-              draggedBm.group = target.bookmark.group;
+          const draggedIdx = order.indexOf(draggedGroupName);
+          if (draggedIdx >= 0) {
+            order.splice(draggedIdx, 1);
+          }
+          
+          if (target instanceof GroupItem) {
+            const targetIdx = order.indexOf(target.group);
+            if (targetIdx >= 0) {
+              order.splice(targetIdx, 0, draggedGroupName);
+            } else {
+              order.push(draggedGroupName);
             }
-            
-            let newTargetIdx = all.findIndex(b =>
+          } else {
+            order.push(draggedGroupName);
+          }
+          
+          await saveGroupOrder(order);
+          this.refresh();
+          return;
+        }
+        
+        // Case 2: Dragging a BookmarkItem (Reordering bookmarks or moving to another group)
+        if (element instanceof BookmarkItem) {
+          debugLog(`[GroupsProvider Drop] Dragged item is BookmarkItem "${element.bookmark.content}". Reordering or moving...`);
+          const bookmark = element.bookmark;
+          const all = getBookmarks();
+          
+          const draggedIdx = all.findIndex(b =>
+            b.uri === bookmark.uri && b.line === bookmark.line && b.group === bookmark.group
+          );
+          if (draggedIdx < 0) {
+            debugLog(`[GroupsProvider Drop] Could not find the dragged bookmark in local store.`);
+            return;
+          }
+          
+          const draggedBm = all[draggedIdx];
+          
+          if (target instanceof GroupItem) {
+            debugLog(`[GroupsProvider Drop] Dropped on GroupItem "${target.group}". Moving bookmark...`);
+            all.splice(draggedIdx, 1);
+            if (draggedBm.group !== target.group) {
+              draggedBm.group = target.group;
+              all.push(draggedBm);
+              await saveBookmarks(all);
+              this.refresh();
+              bookmarksProv.refresh();
+              throttledUpdateAllDecorations();
+              vscode.window.showInformationMessage(`Bookmark moved to group: ${target.group}`);
+            } else {
+              all.push(draggedBm);
+              await saveBookmarks(all);
+              this.refresh();
+              bookmarksProv.refresh();
+              throttledUpdateAllDecorations();
+              vscode.window.showInformationMessage(`Bookmark moved to end of group`);
+            }
+          } else if (target instanceof BookmarkItem) {
+            debugLog(`[GroupsProvider Drop] Dropped on BookmarkItem "${target.bookmark.content}". Reordering within group...`);
+            const targetIdx = all.findIndex(b =>
               b.uri === target.bookmark.uri && b.line === target.bookmark.line && b.group === target.bookmark.group
             );
-            if (newTargetIdx < 0) newTargetIdx = targetIdx;
             
-            all.splice(newTargetIdx, 0, draggedBm);
-            
-            await saveBookmarks(all);
-            this.refresh();
-            bookmarksProv.refresh();
-            throttledUpdateAllDecorations();
-            vscode.window.showInformationMessage("Bookmark reordered");
-          }
-        } else {
-          console.log(`[GroupsProvider Drop] Dropped on empty space/root. Moving bookmark to activeGroup "${activeGroup}"...`);
-          if (draggedBm.group !== activeGroup) {
-            draggedBm.group = activeGroup;
-            all.splice(draggedIdx, 1);
-            all.push(draggedBm);
-            await saveBookmarks(all);
-            this.refresh();
-            bookmarksProv.refresh();
-            throttledUpdateAllDecorations();
-            vscode.window.showInformationMessage(`Bookmark moved to active group: ${activeGroup}`);
+            if (targetIdx >= 0) {
+              all.splice(draggedIdx, 1);
+              
+              if (draggedBm.group !== target.bookmark.group) {
+                draggedBm.group = target.bookmark.group;
+              }
+              
+              let newTargetIdx = all.findIndex(b =>
+                b.uri === target.bookmark.uri && b.line === target.bookmark.line && b.group === target.bookmark.group
+              );
+              if (newTargetIdx < 0) newTargetIdx = targetIdx;
+              
+              all.splice(newTargetIdx, 0, draggedBm);
+              
+              await saveBookmarks(all);
+              this.refresh();
+              bookmarksProv.refresh();
+              throttledUpdateAllDecorations();
+              vscode.window.showInformationMessage("Bookmark reordered");
+            }
+          } else {
+            debugLog(`[GroupsProvider Drop] Dropped on empty space/root. Moving bookmark to activeGroup "${activeGroup}"...`);
+            if (draggedBm.group !== activeGroup) {
+              draggedBm.group = activeGroup;
+              all.splice(draggedIdx, 1);
+              all.push(draggedBm);
+              await saveBookmarks(all);
+              this.refresh();
+              bookmarksProv.refresh();
+              throttledUpdateAllDecorations();
+              vscode.window.showInformationMessage(`Bookmark moved to active group: ${activeGroup}`);
+            }
           }
         }
+      } catch (err) {
+        console.error(`[GroupsProvider Drop] Error during drop:`, err);
+        vscode.window.showErrorMessage(`Drop error: ${err.message}`);
       }
     }
   }
@@ -745,10 +770,10 @@ async function activate(context) {
     }
 
     handleDrag(source, data) {
-      console.log(`[BookmarksProvider Drag] Starting drag. Source elements count: ${source.length}`);
+      debugLog(`[BookmarksProvider Drag] Starting drag. Source elements count: ${source.length}`);
       source.forEach((el, i) => {
         if (el instanceof BookmarkItem) {
-          console.log(`  Element ${i}: BookmarkItem "${el.bookmark.content}" at line ${el.bookmark.line}`);
+          debugLog(`  Element ${i}: BookmarkItem "${el.bookmark.content}" at line ${el.bookmark.line}`);
         }
       });
       data.set("application/vnd.code.tree.bookmarksview",
@@ -756,17 +781,17 @@ async function activate(context) {
     }
     
     async handleDrop(target, data) {
-      console.log(`[BookmarksProvider Drop] Received drop.`);
+      debugLog(`[BookmarksProvider Drop] Received drop.`);
       const transfer = data.get("application/vnd.code.tree.bookmarkgroupsview");
       if (!transfer) {
-        console.log(`[BookmarksProvider Drop] No transfer data found from bookmarkgroupsview.`);
+        debugLog(`[BookmarksProvider Drop] No transfer data found from bookmarkgroupsview.`);
         return;
       }
       
       const elements = transfer.value;
       if (Array.isArray(elements) && elements.length) {
         const element = elements[0];
-        console.log(`[BookmarksProvider Drop] Dragged item: GroupItem "${element.group}". Changing active group...`);
+        debugLog(`[BookmarksProvider Drop] Dragged item: GroupItem "${element.group}". Changing active group...`);
         if (element instanceof GroupItem) {
           await setActiveGroup(element.group);
           groupsProv.refresh();
