@@ -2,7 +2,7 @@
         "name": "bookmark-extension",
         "displayName": "Bookmark Extension",
         "description": "Bookmark lines with line number and content, with groups and colors",
-        "version": "0.0.1",
+        "version": "0.0.2",
         "publisher": "HB24",
         "engines": {
                 "vscode": "^1.50.0"
@@ -266,6 +266,6 @@
                 "watch": "echo 'No watch needed'"
         },
         "devDependencies": {
-                "@types/vscode": "^1.120.0"
+                "@types/vscode": "^1.50.0"
         }
 }
