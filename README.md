@@ -1,20 +1,21 @@
 # 📚 Smart Bookmarks for VS Code
 
-A powerful and intuitive bookmark extension that helps you navigate your code with ease. Organize bookmarks into groups, customize colors, and jump between important code locations instantly.
+A powerful and intuitive bookmark extension that helps you navigate your code with ease. Organize bookmarks into groups, create nested sub-groups, customize colors, and jump between important code locations instantly without losing your horizontal scroll position.
 
 ## ✨ Features
 
 ### 🎯 Core Functionality
 - **Quick Bookmarking**: Toggle bookmarks with a simple keyboard shortcut (`Ctrl+Alt+K` / `Cmd+Alt+K`)
-- **Line Preservation**: Bookmarks automatically adjust when you add/remove lines
+- **Line & Scroll Preservation**: Bookmarks automatically adjust when you add/remove lines, and jumping to them preserves your exact horizontal scroll position
 - **Content Preview**: See the actual code content in the bookmark list
 - **Fast Navigation**: Jump to next/previous bookmarks with `F8`/`Shift+F8`
 - **Cross-File Jumping**: Seamlessly jump to bookmarks in different files
 
-### 🏷️ Group Management
+### 🏷️ Group & Hierarchy Management
 - **Multiple Groups**: Organize bookmarks into custom groups (Default, Tests, TODO, etc.)
+- **Nested Sub-Groups**: Right-click any group to create nested sub-groups (e.g., `Bugs ❯ Backend`)
+- **Send To...**: Right-click any bookmark (in the sidebar or directly in the editor) to instantly move it to another group using a smart quick-pick menu
 - **Color-Coded**: Each group gets a unique color for easy visual identification
-- **Active Group**: Work with one group at a time to stay focused
 - **Drag & Drop**: Reorder groups effortlessly in the sidebar
 - **Quick Reorder**: Use the inline Move Up (↑) and Move Down (↓) arrows to organize bookmarks within a group
 
@@ -22,13 +23,14 @@ A powerful and intuitive bookmark extension that helps you navigate your code wi
 - **Gutter Icons**: Colored bookmark icons in the editor gutter
 - **Line Highlighting**: Subtle background highlighting of bookmarked lines
 - **Flash Highlights**: Animate jumps with a visual color flash to catch your attention
-- **Customizable**: Adjust colors and opacity to match your theme
+- **Customizable Tree UI**: Choose between a minimalist text-only bookmark list or toggle on colored icons for individual bookmarks
 - **Tree Views**: Organized sidebar panels for groups and bookmarks
 
 ### ⚡ Performance Optimized
 - **Throttled Updates**: Smooth performance even with many bookmarks
 - **Cached Operations**: Intelligent caching for faster response times
 - **Batch Processing**: Efficient handling of multiple operations
+- **Production Ready**: Zero unnecessary console logs during regular usage
 
 ## 🚀 Quick Start
 
@@ -70,7 +72,8 @@ Customize the extension through VS Code settings:
   "bookmarkExtension.opacity": 0.3,
   "bookmarkExtension.flashHighlight": true,
   "bookmarkExtension.scrollAnimation": "all",
-  "bookmarkExtension.allowCrossFileJump": true
+  "bookmarkExtension.allowCrossFileJump": true,
+  "bookmarkExtension.showBookmarkIconInTree": false
 }
 ```
 
@@ -82,41 +85,47 @@ Customize the extension through VS Code settings:
 - **`flashHighlight`**: Briefly flash the bookmark color when jumping to it
 - **`scrollAnimation`**: Control smooth scrolling (`all`, `sameFileOnly`, `none`)
 - **`allowCrossFileJump`**: Let `F8` jump across files instead of wrapping inside the current file
+- **`showBookmarkIconInTree`**: Toggle colored bookmark icons next to individual entries in the sidebar views
 
 ## 🖱️ Using the Interface
 
 ### Sidebar Views
 
 **Bookmark Groups Panel:**
-- View all your bookmark groups
+- View all your bookmark groups and sub-groups
 - Active group is marked with a bullet point
 - Click any group to switch to it
 - Hover over a bookmark to use Move Up (↑) / Move Down (↓) buttons
-- Right-click for group management options
+- Right-click for group management options (Create Sub-group, Rename, Delete)
 
 **Bookmarks Panel:**
 - Shows bookmarks from the active group
-- Organized by file for easy navigation
 - Click any bookmark to jump to that location
 
 ### Context Menus
 
-**Right-click on bookmarks** for options like:
-- Remove bookmark
-- Move to different group
+**Right-click in Text Editor:**
+- `BM: Send To...` instantly moves the bookmarked line your cursor is on to another group
 
-**Right-click on groups** for options like:
-- Set as active group
-- Rename group
-- Delete group (and all its bookmarks)
+**Right-click on bookmarks in Sidebar:**
+- `Open Bookmark`
+- `BM: Send To...`
+- `Remove Bookmark`
+
+**Right-click on groups in Sidebar:**
+- `Set Active Group`
+- `Create Sub-group`
+- `Rename Group`
+- `Delete Group` (recursively deletes all sub-groups and their bookmarks)
 
 ## 💡 Usage Tips
 
 ### Workflow Suggestions
 
 1. **Create Semantic Groups**: Use groups like "TODO", "Bugs", "Important", "Review"
-2. **Color Coordination**: Match group colors to your workflow (red for bugs, yellow for TODO)
-3. **Regular Cleanup**: Use "Clear All Bookmarks" to clean up completed tasks
+2. **Build Hierarchies**: Use sub-groups like `Bugs ❯ Backend ❯ Critical`
+3. **Color Coordination**: Match group colors to your workflow (red for bugs, yellow for TODO)
+4. **Regular Cleanup**: Use "Clear All Bookmarks" to clean up completed tasks
 
 ### Best Practices
 
@@ -157,4 +166,3 @@ Customize the extension through VS Code settings:
 **Colors not updating?**
 - Settings changes apply automatically
 - Ensure color values are valid hex codes
-

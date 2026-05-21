@@ -2,10 +2,10 @@
         "name": "bookmark-extension",
         "displayName": "Bookmark Extension",
         "description": "Bookmark lines with line number and content, with groups and colors",
-        "version": "0.0.2",
+        "version": "0.0.3",
         "publisher": "HB24",
         "engines": {
-                "vscode": "^1.50.0"
+                "vscode": "^1.120.0"
         },
         "categories": [
                 "Other"
@@ -64,7 +64,7 @@
                         },
                         {
                                 "command": "bm.moveBookmarkToGroup",
-                                "title": "BM: Move Bookmark To Group",
+                                "title": "BM: Send To...",
                                 "icon": "$(list-selection)"
                         },
                         {
@@ -90,6 +90,10 @@
                                 "command": "bm.moveBookmarkDown",
                                 "title": "Move Down",
                                 "icon": "$(arrow-down)"
+                        },
+                        {
+                                "command": "bm.createSubGroup",
+                                "title": "Create Sub-group"
                         }
                 ],
                 "views": {
@@ -117,18 +121,23 @@
                                         "command": "bm.toggleBookmark",
                                         "when": "editorTextFocus",
                                         "group": "bookmarks"
+                                },
+                                {
+                                        "command": "bm.moveBookmarkToGroup",
+                                        "when": "editorTextFocus && bm.isBookmarkedLine",
+                                        "group": "bookmarks@1"
                                 }
                         ],
                         "view/item/context": [
                                 {
                                         "command": "bm.openBookmark",
                                         "when": "view == bookmarksView && viewItem == bookmarkItem",
-                                        "group": "inline"
+                                        "group": "context@1"
                                 },
                                 {
                                         "command": "bm.removeBookmark",
                                         "when": "view == bookmarksView && viewItem == bookmarkItem",
-                                        "group": "inline"
+                                        "group": "context@2"
                                 },
                                 {
                                         "command": "bm.moveBookmarkToGroup",
@@ -144,6 +153,11 @@
                                         "command": "bm.renameGroup",
                                         "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem",
                                         "group": "context"
+                                },
+                                {
+                                        "command": "bm.createSubGroup",
+                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem",
+                                        "group": "context@1"
                                 },
                                 {
                                         "command": "bm.deleteGroup",
@@ -163,12 +177,17 @@
                                 {
                                         "command": "bm.openBookmark",
                                         "when": "view == bookmarkGroupsView && viewItem == bookmarkItem",
-                                        "group": "inline@3"
+                                        "group": "context@1"
+                                },
+                                {
+                                        "command": "bm.moveBookmarkToGroup",
+                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkItem",
+                                        "group": "context@2"
                                 },
                                 {
                                         "command": "bm.removeBookmark",
                                         "when": "view == bookmarkGroupsView && viewItem == bookmarkItem",
-                                        "group": "inline@4"
+                                        "group": "context@3"
                                 }
                         ],
                         "view/title": [
@@ -238,6 +257,11 @@
                                         "type": "boolean",
                                         "default": true,
                                         "description": "Allow or block jumping to bookmarks in different files."
+                                },
+                                "bookmarkExtension.showBookmarkIconInTree": {
+                                        "type": "boolean",
+                                        "default": false,
+                                        "description": "Show the colored bookmark logo next to individual bookmarks in the sidebar views."
                                 }
                         }
                 },

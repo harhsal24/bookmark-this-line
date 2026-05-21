@@ -104,7 +104,8 @@ async function activate(context) {
         opacity: config.get("opacity", 0.3),
         scrollAnimation: config.get("scrollAnimation", "all"),
         flashHighlight: config.get("flashHighlight", true),
-        allowCrossFileJump: config.get("allowCrossFileJump", true)
+        allowCrossFileJump: config.get("allowCrossFileJump", true),
+        showBookmarkIconInTree: config.get("showBookmarkIconInTree", false)
       };
       isDirtyConfig = false;
     }
@@ -235,6 +236,8 @@ async function activate(context) {
     }
     
     throttledUpdateAllDecorations();
+    if (groupsProv) groupsProv.refresh();
+    if (bookmarksProv) bookmarksProv.refresh();
   }
 
   // --- Optimized decoration updates with throttling ---
@@ -389,9 +392,20 @@ async function activate(context) {
       useAnimation = isSameFile;
     }
     
+    const getPosWithSameColumn = (line) => {
+      const currentCharacter = editor.selection.active.character;
+      let maxChar = 0;
+      try {
+        maxChar = editor.document.lineAt(line).text.length;
+      } catch (e) {
+        // line might be out of bounds if file changed externally
+      }
+      return new vscode.Position(line, Math.min(currentCharacter, maxChar));
+    };
+    
     // If it's a different file, jump instantly and trigger the flash notification if enabled
     if (!isSameFile) {
-      const pos = new vscode.Position(targetLine, 0);
+      const pos = getPosWithSameColumn(targetLine);
       editor.selection = new vscode.Selection(pos, pos);
       editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
       if (config.flashHighlight !== false) {
@@ -401,7 +415,7 @@ async function activate(context) {
     }
     
     if (!useAnimation) {
-      const pos = new vscode.Position(targetLine, 0);
+      const pos = getPosWithSameColumn(targetLine);
       editor.selection = new vscode.Selection(pos, pos);
       editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
       if (config.flashHighlight !== false) {
@@ -412,7 +426,7 @@ async function activate(context) {
     
     const currentLine = editor.selection.active.line;
     if (currentLine === targetLine) {
-      const pos = new vscode.Position(targetLine, 0);
+      const pos = getPosWithSameColumn(targetLine);
       editor.selection = new vscode.Selection(pos, pos);
       editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
       if (config.flashHighlight !== false) {
@@ -425,7 +439,7 @@ async function activate(context) {
     const absDiff = Math.abs(diff);
     
     if (absDiff <= 2) {
-      const pos = new vscode.Position(targetLine, 0);
+      const pos = getPosWithSameColumn(targetLine);
       editor.selection = new vscode.Selection(pos, pos);
       editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
       if (config.flashHighlight !== false) {
@@ -445,7 +459,7 @@ async function activate(context) {
         currentStep++;
         if (currentStep >= stepsCount) {
           cancelActiveAnimation();
-          const pos = new vscode.Position(targetLine, 0);
+          const pos = getPosWithSameColumn(targetLine);
           editor.selection = new vscode.Selection(pos, pos);
           editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
           if (config.flashHighlight !== false) {
@@ -456,7 +470,7 @@ async function activate(context) {
           const easeT = t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
           const interpLine = Math.round(currentLine + diff * easeT);
           
-          const pos = new vscode.Position(interpLine, 0);
+          const pos = getPosWithSameColumn(interpLine);
           editor.selection = new vscode.Selection(pos, pos);
           editor.revealRange(new vscode.Range(pos, pos), vscode.TextEditorRevealType.InCenter);
         }
@@ -478,16 +492,18 @@ async function activate(context) {
     }, TREE_REFRESH_THROTTLE_MS);
   }  // --- Optimized Tree Items (lazy loading) ---
   class GroupItem extends vscode.TreeItem {
-    constructor(name, isActive, color) {
+    constructor(pathName, isActive, color) {
+      const parts = pathName.split('/');
+      const leafName = parts[parts.length - 1];
       super(
-        isActive ? `${name} ⭐` : name,
+        isActive ? `${leafName} ⭐` : leafName,
         vscode.TreeItemCollapsibleState.Collapsed
       );
-      this.group = name;
-      this.id = `group-${name}`;
+      this.group = pathName;
+      this.id = `group-${pathName}`;
       this.contextValue = "bookmarkGroupItem";
       this.iconPath = makeIconUri(color);
-      this.tooltip = isActive ? `${name} (Active Group)` : `${name} (Click to view bookmarks)`;
+      this.tooltip = isActive ? `${pathName} (Active Group)` : `${pathName} (Click to view bookmarks)`;
     }
   }
 
@@ -505,7 +521,12 @@ async function activate(context) {
       this.id = `bm-${viewId}-${bookmark.group}-${safeUri}-${bookmark.line}`;
       this.contextValue = "bookmarkItem";
       this.tooltip = `${u.fsPath} (Line ${bookmark.line + 1})`;
-      this.iconPath = makeIconUri(color);
+      
+      const { showBookmarkIconInTree } = getConfig();
+      if (showBookmarkIconInTree) {
+        this.iconPath = makeIconUri(color);
+      }
+      
       this.command = {
         command: "bm.openBookmark",
         title: "Open Bookmark",
@@ -546,18 +567,29 @@ async function activate(context) {
     }
     
     getChildren(item) {
+      const groups = getGroups();
+      const order = getGroupOrder();
+
       if (!item) {
-        const groups = getGroups();
-        const order = getGroupOrder();
+        // Return root groups (groups with no slashes in their path)
+        const rootGroups = order.filter(g => !g.includes('/'));
         return Promise.resolve(
-          order.map(g => new GroupItem(g, g === activeGroup, groups[g]))
+          rootGroups.map(g => new GroupItem(g, g === activeGroup, groups[g]))
         );
       }
       
-      const groups = getGroups();
       const groupColor = groups[item.group];
+      
+      // Find sub-groups: groups that start with `${item.group}/` and have no additional slashes
+      const prefix = item.group + '/';
+      const subGroups = order.filter(g => g.startsWith(prefix) && !g.slice(prefix.length).includes('/'));
+      const subGroupItems = subGroups.map(g => new GroupItem(g, g === activeGroup, groups[g]));
+      
+      // Find bookmarks for this exact group
       const bookmarks = getBookmarks().filter(b => b.group === item.group);
-      return Promise.resolve(bookmarks.map(b => new BookmarkItem(b, groupColor)));
+      const bookmarkItems = bookmarks.map(b => new BookmarkItem(b, groupColor));
+      
+      return Promise.resolve([...subGroupItems, ...bookmarkItems]);
     }
     
     handleDrag(source, data) {
@@ -933,18 +965,39 @@ async function activate(context) {
     }),
 
     vscode.commands.registerCommand("bm.moveBookmarkToGroup", async (item) => {
-      const bm = item?.bookmark;
-      if (!bm) return;
+      let bm = item?.bookmark;
+      
+      // If called from editor context menu, item.bookmark is undefined
+      if (!bm) {
+        const editor = vscode.window.activeTextEditor;
+        if (editor) {
+          const uri = editor.document.uri.toString();
+          const line = editor.selection.active.line;
+          const all = getBookmarks();
+          bm = all.find(b => b.uri === uri && b.line === line);
+        }
+      }
+      
+      if (!bm) {
+        return vscode.window.showInformationMessage("No bookmark found on this line");
+      }
       
       const groups = Object.keys(getGroups()).filter(g => g !== bm.group);
       if (!groups.length) {
         return vscode.window.showInformationMessage("No other groups");
       }
       
-      const target = await vscode.window.showQuickPick(groups, {
+      const quickPickItems = groups.map(g => ({
+        label: g.replace(/\//g, ' ❯ '),
+        groupPath: g
+      }));
+      
+      const target = await vscode.window.showQuickPick(quickPickItems, {
         placeHolder: "Move to which group?",
       });
       if (!target) return;
+      
+      const targetPath = target.groupPath;
       
       const all = getBookmarks();
       const idx = all.findIndex(b => 
@@ -952,12 +1005,12 @@ async function activate(context) {
       );
       
       if (idx >= 0) {
-        all[idx].group = target;
+        all[idx].group = targetPath;
         await saveBookmarks(all);
         groupsProv.refresh();
         bookmarksProv.refresh();
         throttledUpdateAllDecorations();
-        vscode.window.showInformationMessage(`Moved to ${target}`);
+        vscode.window.showInformationMessage(`Moved to ${targetPath}`);
       }
     }),
 
@@ -970,6 +1023,37 @@ async function activate(context) {
       viewBookmarks.title = `Bookmarks: ${activeGroup}`;
       throttledUpdateAllDecorations();
       throttledUpdateCursorContext();
+    }),
+
+    vscode.commands.registerCommand("bm.createSubGroup", async (item) => {
+      const parentName = item?.group;
+      if (!parentName) return;
+
+      const leafName = await vscode.window.showInputBox({ prompt: `New sub-group name under "${parentName}"` });
+      if (!leafName) return;
+
+      // Ensure no slashes in leaf name
+      const safeLeafName = leafName.replace(/\//g, '');
+      if (!safeLeafName) return;
+
+      const newPath = `${parentName}/${safeLeafName}`;
+      const groups = getGroups();
+      if (groups[newPath]) {
+        return vscode.window.showWarningMessage("Sub-group already exists");
+      }
+
+      const color = hslToHex(Math.random() * 360, 70, 80);
+      groups[newPath] = color;
+      await saveGroups(groups);
+
+      const order = getGroupOrder();
+      if (!order.includes(newPath)) {
+        order.push(newPath);
+        await saveGroupOrder(order);
+      }
+
+      ensureDecorationForGroup(newPath, true);
+      groupsProv.refresh();
     }),
 
     vscode.commands.registerCommand("bm.createGroup", async () => {
@@ -1014,31 +1098,43 @@ async function activate(context) {
         return vscode.window.showWarningMessage("Group name already exists");
       }
       
-      const color = groups[old];
-      delete groups[old];
-      groups[newName] = color;
-      await saveGroups(groups);
-
       const order = getGroupOrder();
-      const oIdx = order.indexOf(old);
-      if (oIdx >= 0) {
-        order[oIdx] = newName;
-        await saveGroupOrder(order);
+      
+      // We must rename the group AND all its sub-groups
+      const oldPrefix = old + '/';
+      const newPrefix = newName + '/';
+      
+      const keysToRename = Object.keys(groups).filter(g => g === old || g.startsWith(oldPrefix));
+      for (const k of keysToRename) {
+        const updatedKey = k === old ? newName : newPrefix + k.slice(oldPrefix.length);
+        const color = groups[k];
+        delete groups[k];
+        groups[updatedKey] = color;
+        
+        const oIdx = order.indexOf(k);
+        if (oIdx >= 0) {
+          order[oIdx] = updatedKey;
+        }
+        
+        const oldDecoration = decorationTypes.get(k);
+        if (oldDecoration) {
+          oldDecoration.dispose();
+          decorationTypes.delete(k);
+        }
+        ensureDecorationForGroup(updatedKey, true);
       }
       
-      const bms = getBookmarks().map(b => 
-        b.group === old ? { ...b, group: newName } : b
-      );
+      await saveGroups(groups);
+      await saveGroupOrder(order);
+      
+      const bms = getBookmarks().map(b => {
+        if (b.group === old) return { ...b, group: newName };
+        if (b.group.startsWith(oldPrefix)) return { ...b, group: newPrefix + b.group.slice(oldPrefix.length) };
+        return b;
+      });
       await saveBookmarks(bms);
       
-      // Clean up old decoration
-      const oldDecoration = decorationTypes.get(old);
-      if (oldDecoration) {
-        oldDecoration.dispose();
-        decorationTypes.delete(old);
-      }
-      
-      ensureDecorationForGroup(newName, true);
+      // Decorations are now handled in the loop above
       
       if (activeGroup === old) {
         await setActiveGroup(newName);
@@ -1055,33 +1151,38 @@ async function activate(context) {
       const name = item?.group;
       if (!name) return;
       
-      const count = getBookmarks().filter(b => b.group === name).length;
+      const prefix = name + '/';
+      const count = getBookmarks().filter(b => b.group === name || b.group.startsWith(prefix)).length;
       const confirm = await vscode.window.showWarningMessage(
-        `Delete "${name}" and ${count} bookmarks?`,
+        `Delete "${name}" (and all sub-groups) and their ${count} bookmarks?`,
         { modal: true }, "Yes"
       );
       if (confirm !== "Yes") return;
       
       const groups = getGroups();
-      delete groups[name];
-      await saveGroups(groups);
-
       const order = getGroupOrder();
-      const idx = order.indexOf(name);
-      if (idx >= 0) {
-        order.splice(idx, 1);
-        await saveGroupOrder(order);
+      
+      const keysToDelete = Object.keys(groups).filter(g => g === name || g.startsWith(prefix));
+      for (const k of keysToDelete) {
+        delete groups[k];
+        
+        const idx = order.indexOf(k);
+        if (idx >= 0) {
+          order.splice(idx, 1);
+        }
+        
+        const decoration = decorationTypes.get(k);
+        if (decoration) {
+          decoration.dispose();
+          decorationTypes.delete(k);
+        }
       }
       
-      const remaining = getBookmarks().filter(b => b.group !== name);
+      await saveGroups(groups);
+      await saveGroupOrder(order);
+      
+      const remaining = getBookmarks().filter(b => b.group !== name && !b.group.startsWith(prefix));
       await saveBookmarks(remaining);
-      
-      // Clean up decoration
-      const decoration = decorationTypes.get(name);
-      if (decoration) {
-        decoration.dispose();
-        decorationTypes.delete(name);
-      }
       
       if (activeGroup === name) {
         const keys = Object.keys(groups);
@@ -1231,7 +1332,8 @@ async function activate(context) {
           e.affectsConfiguration("bookmarkExtension.opacity") ||
           e.affectsConfiguration("bookmarkExtension.scrollAnimation") ||
           e.affectsConfiguration("bookmarkExtension.flashHighlight") ||
-          e.affectsConfiguration("bookmarkExtension.allowCrossFileJump")) {
+          e.affectsConfiguration("bookmarkExtension.allowCrossFileJump") ||
+          e.affectsConfiguration("bookmarkExtension.showBookmarkIconInTree")) {
         await applyConfigChanges();
         updateCrossFileJumpStatusBar();
         vscode.window.showInformationMessage("🔧 Bookmark Extension settings have been applied.");
