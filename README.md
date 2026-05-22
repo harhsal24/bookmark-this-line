@@ -10,11 +10,13 @@ A powerful and intuitive bookmark extension that helps you navigate your code wi
 - **Content Preview**: See the actual code content in the bookmark list
 - **Fast Navigation**: Jump to next/previous bookmarks with `F8`/`Shift+F8`
 - **Cross-File Jumping**: Seamlessly jump to bookmarks in different files
+- **Global Search**: Search and jump to any bookmark across your entire workspace using the **Show All Bookmarks** command
 
 ### 🏷️ Group & Hierarchy Management
 - **Multiple Groups**: Organize bookmarks into custom groups (Default, Tests, TODO, etc.)
 - **Nested Sub-Groups**: Right-click any group to create nested sub-groups (e.g., `Bugs ❯ Backend`)
 - **Send To...**: Right-click any bookmark (in the sidebar or directly in the editor) to instantly move it to another group using a smart quick-pick menu
+- **Hide Bookmarks**: Click the inline eye icon `$(eye)` to hide individual bookmarks within a group. This also temporarily disables their highlighting in the editor to keep your code clean!
 - **Color-Coded**: Each group gets a unique color for easy visual identification
 - **Drag & Drop**: Reorder groups effortlessly in the sidebar
 - **Quick Reorder**: Use the inline Move Up (↑) and Move Down (↓) arrows to organize bookmarks within a group
@@ -26,11 +28,10 @@ A powerful and intuitive bookmark extension that helps you navigate your code wi
 - **Customizable Tree UI**: Choose between a minimalist text-only bookmark list or toggle on colored icons for individual bookmarks
 - **Tree Views**: Organized sidebar panels for groups and bookmarks
 
-### ⚡ Performance Optimized
+### ⚡ Advanced Tools & Data Portability
+- **Export & Import**: Instantly backup your entire bookmark ecosystem to a JSON file and restore it across devices or workspaces
 - **Throttled Updates**: Smooth performance even with many bookmarks
 - **Cached Operations**: Intelligent caching for faster response times
-- **Batch Processing**: Efficient handling of multiple operations
-- **Production Ready**: Zero unnecessary console logs during regular usage
 
 ## 🚀 Quick Start
 
@@ -47,6 +48,7 @@ A powerful and intuitive bookmark extension that helps you navigate your code wi
 | `BM: Toggle Bookmark` | `Ctrl+Alt+K` / `Cmd+Alt+K` | Add or remove bookmark on current line |
 | `BM: Next Bookmark` | `F8` | Jump to next bookmark in active group |
 | `BM: Previous Bookmark` | `Shift+F8` | Jump to previous bookmark in active group |
+| `BM: Show All Bookmarks` | - | Search and jump to any bookmark via QuickPick |
 | `BM: Clear All Bookmarks` | - | Remove all bookmarks from active group |
 | `BM: Create Group` | - | Create a new bookmark group |
 | `BM: Toggle Cross-File Jump` | - | Allow or block `F8` jumps to different files |
@@ -60,20 +62,19 @@ Customize the extension through VS Code settings:
   "bookmarkExtension.groupColors": {
     "Default": "#fff59d",
     "Tests": "#aed581",
-    "TODO": "#ba68c8",
-    "Important": "#4fc3f7"
+    "TODO": "#ba68c8"
   },
   "bookmarkExtension.defaultColors": [
     "#fff59d",
     "#aed581", 
-    "#ba68c8",
-    "#4fc3f7"
+    "#ba68c8"
   ],
   "bookmarkExtension.opacity": 0.3,
   "bookmarkExtension.flashHighlight": true,
   "bookmarkExtension.scrollAnimation": "all",
   "bookmarkExtension.allowCrossFileJump": true,
-  "bookmarkExtension.showBookmarkIconInTree": false
+  "bookmarkExtension.showBookmarkIconInTree": false,
+  "bookmarkExtension.showHideBookmarksActionInline": true
 }
 ```
 
@@ -86,6 +87,7 @@ Customize the extension through VS Code settings:
 - **`scrollAnimation`**: Control smooth scrolling (`all`, `sameFileOnly`, `none`)
 - **`allowCrossFileJump`**: Let `F8` jump across files instead of wrapping inside the current file
 - **`showBookmarkIconInTree`**: Toggle colored bookmark icons next to individual entries in the sidebar views
+- **`showHideBookmarksActionInline`**: Controls whether the "Hide Bookmarks" eye icon appears inline (true) or in the context menu (false)
 
 ## 🖱️ Using the Interface
 
@@ -95,8 +97,8 @@ Customize the extension through VS Code settings:
 - View all your bookmark groups and sub-groups
 - Active group is marked with a bullet point
 - Click any group to switch to it
-- Hover over a bookmark to use Move Up (↑) / Move Down (↓) buttons
-- Right-click for group management options (Create Sub-group, Rename, Delete)
+- Hover over a group to hide/unhide its bookmarks using the eye icon
+- Export/Import buttons are located at the top of the panel
 
 **Bookmarks Panel:**
 - Shows bookmarks from the active group
@@ -127,42 +129,13 @@ Customize the extension through VS Code settings:
 3. **Color Coordination**: Match group colors to your workflow (red for bugs, yellow for TODO)
 4. **Regular Cleanup**: Use "Clear All Bookmarks" to clean up completed tasks
 
-### Best Practices
-
-- **Meaningful Content**: Bookmark lines with descriptive code/comments
-- **Group by Purpose**: Separate temporary bookmarks from permanent ones
-- **Use Keyboard Shortcuts**: Master `F8`/`Shift+F8` for quick navigation
-- **Customize Colors**: Set up colors that work well with your theme
-
-## 🔧 Advanced Features
-
-### Drag and Drop
-- Drag groups to reorder them in the sidebar
-- Visual feedback during drag operations
-- Automatic refresh of all views
-
-### Auto Line Adjustment
-- Bookmarks automatically move when you insert/delete lines
-- Smart handling of complex text changes
-- Preserves bookmark relevance as code evolves
-
-### Multi-File Support
-- Bookmarks work across all file types
-- Cross-project bookmark management
-- Persistent storage across VS Code sessions
-
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
 **Bookmarks not showing?**
-- Make sure you have an active group selected
-- Try refreshing the sidebar views
+- Make sure you haven't clicked the "Hide Bookmarks" eye icon for that group.
+- Ensure you have an active group selected.
 
 **Performance issues?**
-- The extension uses throttling to maintain performance
-- If issues persist, try restarting VS Code
-
-**Colors not updating?**
-- Settings changes apply automatically
-- Ensure color values are valid hex codes
+- The extension uses throttling to maintain performance. If issues persist, try restarting VS Code.

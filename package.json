@@ -2,7 +2,7 @@
         "name": "bookmark-extension",
         "displayName": "Bookmark Extension",
         "description": "Bookmark lines with line number and content, with groups and colors",
-        "version": "0.0.3",
+        "version": "0.0.4",
         "publisher": "HB24",
         "engines": {
                 "vscode": "^1.120.0"
@@ -94,6 +94,31 @@
                         {
                                 "command": "bm.createSubGroup",
                                 "title": "Create Sub-group"
+                        },
+                        {
+                                "command": "bm.hideGroupBookmarks",
+                                "title": "Hide Bookmarks",
+                                "icon": "$(eye)"
+                        },
+                        {
+                                "command": "bm.unhideGroupBookmarks",
+                                "title": "Unhide Bookmarks",
+                                "icon": "$(eye-closed)"
+                        },
+                        {
+                                "command": "bm.exportBookmarks",
+                                "title": "Export Bookmarks",
+                                "icon": "$(export)"
+                        },
+                        {
+                                "command": "bm.importBookmarks",
+                                "title": "Import Bookmarks",
+                                "icon": "$(arrow-down)"
+                        },
+                        {
+                                "command": "bm.showAllBookmarks",
+                                "title": "Show All Bookmarks",
+                                "category": "Bookmarks"
                         }
                 ],
                 "views": {
@@ -146,23 +171,43 @@
                                 },
                                 {
                                         "command": "bm.setActiveGroup",
-                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem",
-                                        "group": "inline"
+                                        "when": "view == bookmarkGroupsView && viewItem =~ /bookmarkGroupItem-(visible|hidden)/",
+                                        "group": "inline@2"
                                 },
                                 {
                                         "command": "bm.renameGroup",
-                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem",
+                                        "when": "view == bookmarkGroupsView && viewItem =~ /bookmarkGroupItem-(visible|hidden)/",
                                         "group": "context"
                                 },
                                 {
                                         "command": "bm.createSubGroup",
-                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem",
+                                        "when": "view == bookmarkGroupsView && viewItem =~ /bookmarkGroupItem-(visible|hidden)/",
                                         "group": "context@1"
                                 },
                                 {
                                         "command": "bm.deleteGroup",
-                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem",
+                                        "when": "view == bookmarkGroupsView && viewItem =~ /bookmarkGroupItem-(visible|hidden)/",
                                         "group": "context"
+                                },
+                                {
+                                        "command": "bm.hideGroupBookmarks",
+                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem-visible && config.bookmarkExtension.showHideBookmarksActionInline",
+                                        "group": "inline@1"
+                                },
+                                {
+                                        "command": "bm.unhideGroupBookmarks",
+                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem-hidden && config.bookmarkExtension.showHideBookmarksActionInline",
+                                        "group": "inline@1"
+                                },
+                                {
+                                        "command": "bm.hideGroupBookmarks",
+                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem-visible && !config.bookmarkExtension.showHideBookmarksActionInline",
+                                        "group": "context@4"
+                                },
+                                {
+                                        "command": "bm.unhideGroupBookmarks",
+                                        "when": "view == bookmarkGroupsView && viewItem == bookmarkGroupItem-hidden && !config.bookmarkExtension.showHideBookmarksActionInline",
+                                        "group": "context@4"
                                 },
                                 {
                                         "command": "bm.moveBookmarkUp",
@@ -199,7 +244,17 @@
                                 {
                                         "command": "bm.createGroup",
                                         "when": "view == bookmarkGroupsView",
-                                        "group": "navigation"
+                                        "group": "navigation@1"
+                                },
+                                {
+                                        "command": "bm.exportBookmarks",
+                                        "when": "view == bookmarkGroupsView",
+                                        "group": "navigation@2"
+                                },
+                                {
+                                        "command": "bm.importBookmarks",
+                                        "when": "view == bookmarkGroupsView",
+                                        "group": "navigation@3"
                                 }
                         ]
                 },
@@ -262,6 +317,11 @@
                                         "type": "boolean",
                                         "default": false,
                                         "description": "Show the colored bookmark logo next to individual bookmarks in the sidebar views."
+                                },
+                                "bookmarkExtension.showHideBookmarksActionInline": {
+                                        "type": "boolean",
+                                        "default": true,
+                                        "description": "Show the eye icon inline to hide/unhide bookmarks in groups. If false, it's moved to the bottom of the right-click menu."
                                 }
                         }
                 },

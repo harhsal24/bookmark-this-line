@@ -91,6 +91,14 @@ async function activate(context) {
     return context.workspaceState.update("bookmarkGroupOrder", order);
   };
 
+  const getHiddenGroups = () => {
+    return context.workspaceState.get("hiddenBookmarkGroups", []);
+  };
+
+  const saveHiddenGroups = async (hiddenGroups) => {
+    return context.workspaceState.update("hiddenBookmarkGroups", hiddenGroups);
+  };
+
   const decorationTypes = new Map();
   let activeGroup;
 
@@ -248,10 +256,11 @@ async function activate(context) {
     const rangesMap = new Map();
     const bookmarks = getBookmarks();
     const lineCount = editor.document.lineCount;
+    const hiddenGroups = getHiddenGroups();
     
     // Single pass through bookmarks
     for (const b of bookmarks) {
-      if (b.uri === uri && b.line < lineCount) {
+      if (b.uri === uri && b.line < lineCount && !hiddenGroups.includes(b.group)) {
         if (!decorationTypes.has(b.group)) {
           ensureDecorationForGroup(b.group);
         }
@@ -501,7 +510,9 @@ async function activate(context) {
       );
       this.group = pathName;
       this.id = `group-${pathName}`;
-      this.contextValue = "bookmarkGroupItem";
+      
+      const isHidden = getHiddenGroups().includes(pathName);
+      this.contextValue = isHidden ? "bookmarkGroupItem-hidden" : "bookmarkGroupItem-visible";
       this.iconPath = makeIconUri(color);
       this.tooltip = isActive ? `${pathName} (Active Group)` : `${pathName} (Click to view bookmarks)`;
     }
@@ -586,7 +597,8 @@ async function activate(context) {
       const subGroupItems = subGroups.map(g => new GroupItem(g, g === activeGroup, groups[g]));
       
       // Find bookmarks for this exact group
-      const bookmarks = getBookmarks().filter(b => b.group === item.group);
+      const isHidden = getHiddenGroups().includes(item.group);
+      const bookmarks = isHidden ? [] : getBookmarks().filter(b => b.group === item.group);
       const bookmarkItems = bookmarks.map(b => new BookmarkItem(b, groupColor));
       
       return Promise.resolve([...subGroupItems, ...bookmarkItems]);
@@ -1014,6 +1026,28 @@ async function activate(context) {
       }
     }),
 
+    vscode.commands.registerCommand("bm.hideGroupBookmarks", async (item) => {
+      if (!item?.group) return;
+      const hidden = getHiddenGroups();
+      if (!hidden.includes(item.group)) {
+        hidden.push(item.group);
+        await saveHiddenGroups(hidden);
+        groupsProv.refresh();
+        throttledUpdateAllDecorations();
+      }
+    }),
+
+    vscode.commands.registerCommand("bm.unhideGroupBookmarks", async (item) => {
+      if (!item?.group) return;
+      let hidden = getHiddenGroups();
+      if (hidden.includes(item.group)) {
+        hidden = hidden.filter(g => g !== item.group);
+        await saveHiddenGroups(hidden);
+        groupsProv.refresh();
+        throttledUpdateAllDecorations();
+      }
+    }),
+
     vscode.commands.registerCommand("bm.setActiveGroup", async (item) => {
       if (!item?.group) return;
       
@@ -1323,6 +1357,95 @@ async function activate(context) {
       await config.update("allowCrossFileJump", !allowed, vscode.ConfigurationTarget.Global);
       updateCrossFileJumpStatusBar();
       vscode.window.showInformationMessage(`Cross-file jumping is now ${!allowed ? "enabled" : "disabled"}.`);
+    }),
+
+    vscode.commands.registerCommand("bm.exportBookmarks", async () => {
+      const data = {
+        bookmarks: getBookmarks(),
+        bookmarkGroups: getGroups(),
+        bookmarkGroupOrder: getGroupOrder(),
+        activeBookmarkGroup: getActiveGroup(),
+        hiddenBookmarkGroups: getHiddenGroups()
+      };
+      
+      const uri = await vscode.window.showSaveDialog({
+        defaultUri: vscode.Uri.file('bookmarks-export.json'),
+        filters: { 'JSON': ['json'] }
+      });
+      
+      if (uri) {
+        const fs = require('fs');
+        fs.writeFileSync(uri.fsPath, JSON.stringify(data, null, 2));
+        vscode.window.showInformationMessage("Bookmarks exported successfully!");
+      }
+    }),
+
+    vscode.commands.registerCommand("bm.importBookmarks", async () => {
+      const uris = await vscode.window.showOpenDialog({
+        canSelectMany: false,
+        filters: { 'JSON': ['json'] }
+      });
+      
+      if (uris && uris[0]) {
+        try {
+          const fs = require('fs');
+          const content = fs.readFileSync(uris[0].fsPath, 'utf8');
+          const data = JSON.parse(content);
+          
+          if (!data.bookmarks || !data.bookmarkGroups) {
+            throw new Error("Invalid bookmark export file format.");
+          }
+          
+          await saveBookmarks(data.bookmarks);
+          await saveGroups(data.bookmarkGroups);
+          if (data.bookmarkGroupOrder) await saveGroupOrder(data.bookmarkGroupOrder);
+          if (data.activeBookmarkGroup) await setActiveGroup(data.activeBookmarkGroup);
+          if (data.hiddenBookmarkGroups) await saveHiddenGroups(data.hiddenBookmarkGroups);
+          
+          groupsProv.refresh();
+          bookmarksProv.refresh();
+          throttledUpdateAllDecorations();
+          vscode.window.showInformationMessage("Bookmarks imported successfully!");
+        } catch (e) {
+          vscode.window.showErrorMessage(`Failed to import bookmarks: ${e.message}`);
+        }
+      }
+    }),
+
+    vscode.commands.registerCommand("bm.showAllBookmarks", async () => {
+      const all = getBookmarks();
+      if (!all.length) {
+        return vscode.window.showInformationMessage("No bookmarks found.");
+      }
+      
+      const items = all.map(b => {
+        const fileName = path.basename(vscode.Uri.parse(b.uri).fsPath);
+        return {
+          label: b.content.trim() || `(Line ${b.line + 1})`,
+          description: b.group.replace(/\//g, ' ❯ '),
+          detail: `${fileName}:${b.line + 1}`,
+          bookmark: b
+        };
+      });
+      
+      const selected = await vscode.window.showQuickPick(items, {
+        placeHolder: "Search all bookmarks...",
+        matchOnDescription: true,
+        matchOnDetail: true
+      });
+      
+      if (selected) {
+        const b = selected.bookmark;
+        try {
+          const editor = vscode.window.activeTextEditor;
+          const isSameFile = editor && editor.document.uri.toString() === b.uri;
+          const doc = await vscode.workspace.openTextDocument(vscode.Uri.parse(b.uri));
+          const ed = await vscode.window.showTextDocument(doc);
+          await revealRangeWithAnimation(ed, b.line, isSameFile, b.group);
+        } catch (e) {
+          vscode.window.showErrorMessage(`Failed to open bookmark: ${e.message}`);
+        }
+      }
     }),
 
     // Optimized configuration change handler
